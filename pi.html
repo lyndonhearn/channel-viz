@@ -1,0 +1,435 @@
+
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="description" content="Xively-rickshaw : Some example time series graphs generated from Xively using Rickshaw" />
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+    <link type="text/css" rel="stylesheet" href="css/graph.css">
+    <link type="text/css" rel="stylesheet" href="css/detail.css">
+    <link type="text/css" rel="stylesheet" href="css/legend.css">
+    <link type="text/css" rel="stylesheet" href="css/lines.css">
+
+    <script src="vendor/d3.min.js"></script>
+    <script src="vendor/d3.layout.min.js"></script>
+
+    <script src="rickshaw.min.js"></script>
+    <script src="vendor/moment.min.js"></script>
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.15/jquery-ui.min.js"></script>
+    <script src="http://d23cj0cdvyoxg0.cloudfront.net/xivelyjs-1.0.3.min.js"></script>  
+
+    <title>Raspberry Pi House Monitor</title>
+  </head>
+
+<body>
+
+    <!-- HEADER -->
+    <!--div id="header_wrap" class="outer">
+        <header class="inner">
+          <h1 id="project_title">House</h1>
+        </header>
+    </div-->
+
+    <!-- MAIN CONTENT -->
+      <section id="main_content" class="inner" style:"width:100%">
+      <div id="chart_container" style="background-color:white">
+
+
+	  <table style="background-color:#ffffff">
+          <th colspan=2 align=center>My Pi
+          <div>
+	    Change Range:
+            <button onclick="changeRange(90*60)">30 min</button>
+            <button onclick="changeRange(60*60*2)">1 hr</button>
+            <button onclick="changeRange(7*60*60)">6 hr</button>
+            <button onclick="changeRange(25*60*60)">1 d</button>
+            <button onclick="changeRange(7*24*60*60)">7 d</button>
+	  </div>
+	</th>
+	  <tr>
+	    <td>Temperature <span id="currentvalue_temp">-</span>
+					 <div id="age_temp" style="font-size:10px;text-align:right">-</div>
+              <div id="chart_temp"          style="height:150px"></div></td>
+            <td>Mic Volume: <span id="currentvalue_micvolume">-</span>
+					 <div id="age_micvolume" style="font-size:10px;text-align:right">-</div>
+					<div id="chart_micvolume"     style="height:150px"></div></td>
+	  </tr>
+	  <tr>
+	    <td>Lounge Light Level: <span id="currentvalue_luminosity">-</span>
+					 <div id="age_luminosity" style="font-size:10px;text-align:right">-</div>
+	      <div id="chart_luminosity"    style="height:150px"></div></td>
+            <td>Sound Detected: <span id="currentvalue_sounddetected">-</span>
+					 <div id="age_sounddetected" style="font-size:10px;text-align:right">-</div>
+		<div id="chart_sounddetected" style="height:150px"></div></td>
+
+	  </tr>
+
+  	  <tr><td style="" colspan=2>System</td></tr>
+
+          <tr>
+
+            <td>System Load: <span id="currentvalue_loadavg">-</span>
+					 <div id="age_loadavg" style="font-size:10px;text-align:right">-</div>
+		<div id="chart_loadavg" style="height:150px"></div></td>
+            <td>Authorisations: <span id="currentvalue_auths">-</span>
+					 <div id="age_auths" style="font-size:10px;text-align:right">-</div>
+		<div id="chart_auths"   style="height:150px"></div></td>
+	  </tr>
+	  </table>
+
+
+          <!--div id="legend_container">
+            <div id="smoother" title="Smoothing"></div>
+            <div id="legend"></div>
+          </div-->
+          <div id="slider"></div>
+      </div>
+      </section>
+
+    <!-- FOOTER>
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">test </p>
+        <p>Published</p>
+      </footer>
+    </div-->
+
+<script>
+
+// Set your API key first  
+xively.setKey( "8XBbQUjRHfEnfrrCJzHcnyZ5VZWYHi8On138zhMWSQR4feWk" );  
+FEEDID = "1010812644";
+
+function changeRange(timerequest) {
+  timeRange = timerequest;
+  if (timeRange <= 2*60*60) {
+    query.interval = 30;
+  } else if(timeRange <= 12*60*60) {
+    query.interval = 60;
+  } else if(timeRange <= 40*60*60) {
+    query.interval = 60*5;
+  } else {
+    query.interval = 900;
+  }
+
+  updateQuery();
+  updateAllGraphs();
+}
+
+var timeRange = 60*60*7;
+
+var query = { 
+  start: 0,
+  end:   0,
+  interval: 60, 
+  limit: 1000 
+};
+
+function updateQuery() {
+  query.start   = moment().subtract('s', timeRange).toJSON();
+  query.end = moment().toJSON();
+  console.log("updateQuery:" + query.start + "    " + query.end);
+}
+
+
+
+function updateAllGraphs() {
+  updateQuery();
+  xively.datastream.history(FEEDID, "temp_ext", query, tempExtCallback2);
+  xively.datastream.history(FEEDID, "temp_int", query, tempIntCallback2);
+  xively.datastream.history(FEEDID, "luminosity", query, luminosityCallback2);
+  xively.datastream.history(FEEDID, "micvolume", query, micvolumeCallback2);
+  xively.datastream.history(FEEDID, "noisedetected", query, sounddetectedCallback2);
+  xively.datastream.history(FEEDID, "failed_auths", query, failedauthsCallback2);
+  xively.datastream.history(FEEDID, "good_auths", query, goodauthsCallback2);
+  xively.datastream.history(FEEDID, "load_avg", query, loadavgCallback2);
+}
+
+
+//xively.datastream.subscribe( FEEDID, "temp_ext", tempExtCallback1);
+//xively.datastream.subscribe( FEEDID, "temp_int", tempIntCallback1);
+
+//xively.datastream.subscribe( FEEDID, "luminosity", luminosityCallback1);
+//xively.datastream.subscribe( FEEDID, "micvolume", micvolumeCallback1);
+//xively.datastream.subscribe( FEEDID, "noisedetected", sounddetectedCallback1);
+
+//xively.datastream.subscribe( FEEDID, "failed_auths", failedauthsCallback1);
+//xively.datastream.subscribe( FEEDID, "good_auths", goodauthsCallback1);
+//xively.datastream.subscribe( FEEDID, "load_avg", loadavgCallback1);
+
+updateAllGraphs();
+setInterval(function() { updateAllGraphs(); } , 45000);
+
+var temp_int_data = null;
+var temp_ext_data = null;
+
+var luminosity_data = null;
+var micvolume_data = null;
+var sounddetected_data  = null;
+
+var failedauths_data = null;
+var goodauths_data = null;
+
+function tempExtCallback1(event, data) {  
+ updateQuery();
+ xively.datastream.history( FEEDID, "temp_ext", query, tempExtCallback2);
+}
+function tempExtCallback2(data) {  
+  if(data == null || data.datapoints == null) return;
+  temp_ext_data = data;
+  if(temp_ext_data != null && temp_int_data != null) updateTempGraph();
+}
+
+function tempIntCallback1(event, data) {  
+ updateQuery();
+ xively.datastream.history( FEEDID, "temp_int", query, tempIntCallback2);
+}
+function tempIntCallback2(data) { 
+ if(data == null || data.datapoints == null) return;
+ temp_int_data = data;
+ if(temp_ext_data != null && temp_int_data != null) updateTempGraph();
+}
+
+function luminosityCallback1(event, data) {  
+ console.log(event);
+ console.log(data);
+ updateQuery();
+ xively.datastream.history( FEEDID, "luminosity", query, luminosityCallback2);
+}
+function luminosityCallback2(data) {
+  if(data == null || data.datapoints == null) return;
+  luminosity_data = data;
+  updateGenericGraph("luminosity", data, 66000);
+}
+
+function micvolumeCallback1(event, data) {  
+ updateQuery();
+ xively.datastream.history( FEEDID, "micvolume", query, micvolumeCallback2);
+}
+function micvolumeCallback2(data) {
+  if(data == null || data.datapoints == null) return;
+  micvolume_data = data;
+  updateGenericGraph("micvolume", data, 1);
+}
+
+function sounddetectedCallback1(event, data) {  
+ updateQuery();
+ xively.datastream.history( FEEDID, "noisedetected", query, sounddetectedCallback2);
+}
+function sounddetectedCallback2(data) {
+  if(data == null || data.datapoints == null) return;
+  sounddetected_data = data;
+  updateGenericGraph("sounddetected", data, 3);
+}
+
+
+function failedauthsCallback1(event, data) {  
+ updateQuery();
+ xively.datastream.history( FEEDID, "failed_auths", query, failedauthsCallback2);
+}
+function failedauthsCallback2(data) {  
+  if(data == null || data.datapoints == null) return;
+  failedauths_data = data;
+  if(failedauths_data != null && goodauths_data != null) updateAuthsGraph();
+}
+
+function goodauthsCallback1(event, data) {  
+ updateQuery();
+ xively.datastream.history( FEEDID, "good_auths", query, goodauthsCallback2);
+}
+function goodauthsCallback2(data) { 
+  if(data == null || data.datapoints == null) return;
+  goodauths_data = data;
+  if(failedauths_data != null && goodauths_data != null) updateAuthsGraph();
+}
+
+
+function loadavgCallback1(event, data) {  
+ updateQuery();
+ xively.datastream.history( FEEDID, "load_avg", query, loadavgCallback2);
+}
+function loadavgCallback2(data) {
+  if(data == null || data.datapoints == null) return;
+  loadavg_data = data;
+  updateGenericGraph("loadavg", data, 10);
+}
+
+
+
+function dataToSeries(data, maxvalue) {
+  var series = [];
+  var filtedData = data.datapoints.filter(function(x) { return (x.value < maxvalue); });
+  for (var i=0; i < filtedData.length; i++ ) {
+    var date = moment.utc(filtedData[i].at);
+    var value = parseFloat(filtedData[i].value);
+    series[i] = {x: date.unix(), y: value};
+  }
+
+ return series;
+}
+
+function updateTempGraph() {
+  var unit = temp_int_data.unit.label;
+  var series_int = dataToSeries(temp_int_data, 100);
+  var series_ext = dataToSeries(temp_ext_data, 100)
+
+  while(series_int.length<series_ext.length) {
+   series_int[series_int.length] = series_int[series_int.length-1]
+  }
+  while(series_int.length>series_ext.length) {
+   series_ext[series_ext.length] = series_ext[series_ext.length-1]
+  }
+
+  document.getElementById("chart_temp").innerHTML = '';
+  var graph = new Rickshaw.Graph( {
+    element: document.querySelector("#chart_temp"),
+      width: 500,
+//      height: 400,
+      min: 10,
+      renderer: 'line',
+      series: [
+        {
+          data: series_int,
+          color: '#6060c0',
+          name: unit
+        },
+        {
+          data: series_ext,
+          color: '#c02000',
+          name: unit
+        }
+      ]
+    } );
+  graph.render();
+  applyStyling(graph);
+
+  lastValue_int = series_int[series_int.length-1];
+  lastValue_ext = series_ext[series_ext.length-1];
+  document.getElementById("currentvalue_temp").innerHTML = "Conservatory: " + lastValue_int.y + " " + unit + ",  Outside: " + lastValue_ext.y + " " + unit;
+  document.getElementById("age_temp").innerHTML = howLongAgo(Math.max(lastValue_int.x,lastValue_ext.x));
+
+  console.log("updateTemp called: updated values: " + lastValue_int.y + " " + lastValue_ext.y + " " + lastValue_int.x);
+
+}
+
+function updateAuthsGraph() {
+  var unit = "";
+
+  var series_good = dataToSeries(goodauths_data, 2);
+  var series_failed = dataToSeries(failedauths_data, 2)
+  
+  while(series_good.length<series_failed.length) {
+   series_good[series_good.length] = series_good[series_good.length-1]
+  }
+  while(series_good.length>series_failed.length) {
+   series_failed[series_failed.length] = series_failed[series_failed.length-1]
+  }
+  document.getElementById("chart_auths").innerHTML = '';
+  var graph = new Rickshaw.Graph( {
+    element: document.querySelector("#chart_auths"),
+      width: 500,
+//      height: 400,
+      renderer: 'line',
+      series: [
+        {
+          data: series_good,
+          color: '#6060c0',
+          name: unit
+        },
+        {
+          data: series_failed,
+          color: '#c06000',
+          name: unit
+        }
+      ]
+    } );
+  graph.render();
+
+  lastValue = series_good[series_good.length-1];
+  document.getElementById("currentvalue_auths").innerHTML = lastValue.y;
+  document.getElementById("age_auths").innerHTML = howLongAgo(lastValue.x);
+  applyStyling(graph);
+
+  console.log("updateAuths called: updated values: " + lastValue.y + " " + lastValue.x);
+
+}
+
+function updateGenericGraph(chartname, data, limit) {
+  
+  var unit = "";
+  if(data.unit != null) unit = data.unit.label;
+  var series = dataToSeries(data, limit);
+
+  document.getElementById("chart_" + chartname).innerHTML = '';
+
+
+  var graph = new Rickshaw.Graph( {
+    element: document.querySelector("#chart_" + chartname),
+      width: 500,
+//      height: 400
+      min: -0.15,
+      renderer: 'line',
+      series: [
+        {
+          data: series,
+          color: '#6060c0',
+          name: unit,
+        }
+      ]
+    } );
+  applyStyling(graph);
+
+  graph.render();
+
+  lastValue = series[series.length-1];
+
+  document.getElementById("currentvalue_"+chartname).innerHTML = lastValue.y + " " + unit;
+  document.getElementById("age_"+chartname).innerHTML = howLongAgo(lastValue.x);
+
+  console.log("updateGenericGraph called: " + chartname + " updated values: " + lastValue.y + " " + lastValue.x);
+
+}
+
+
+
+function applyStyling(graph) {
+
+  var hoverDetail = new Rickshaw.Graph.HoverDetail( {
+    graph: graph,
+    formatter: function(series, x, y) { 
+	return y + " " + series.name;
+    },
+
+    xFormatter: function(x) {
+         d = new Date(x*1000);
+         return d.toDateString() + " " + d.toLocaleTimeString()
+    }
+  } );
+
+  var xAxis = new Rickshaw.Graph.Axis.Time( {
+    graph: graph,
+  });
+  xAxis.render();
+  
+  var yAxis = new Rickshaw.Graph.Axis.Y ( {
+    graph: graph,
+  });
+  yAxis.render();
+
+
+}
+
+function howLongAgo(comparetime) {
+    t = moment(comparetime*1000);
+    return (t.hours()<10?"0":"") + t.hours() + ":" + (t.minute()<10?"0":"") + t.minute() + ":" + (t.seconds()<10?"0":"") + t.seconds();
+
+}
+
+</script>
+
+
+</body>
